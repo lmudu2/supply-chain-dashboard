@@ -5,45 +5,63 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import LabelEncoder
 
-# --- 1. CONFIGURATION ---
-st.set_page_config(page_title="Unified Supply Chain Risk Dashboard", page_icon="🚚", layout="wide")
+# --- 1. CONFIGURATION  ---
+st.set_page_config(page_title="SupplyGuard AI", page_icon="🛡️", layout="wide")
 
-# --- 2.Trains data ---
+st.markdown("""
+    <style>
+        .block-container {padding-top: 1rem; padding-bottom: 0rem;}
+        h1 {margin-top: 0rem; padding-top: 0rem;}
+
+        /* Metric Cards Styling */
+        div[data-testid="stMetric"] {
+            background-color: #f0f2f6;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid #d0d0d0;
+        }
+        /* Force Black Text for Metrics */
+        div[data-testid="stMetric"] label,
+        div[data-testid="stMetric"] div[data-testid="stMetricValue"],
+        div[data-testid="stMetric"] div[data-testid="stMetricDelta"] {
+            color: #000000 !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 2.  Training ---
 @st.cache_resource
 def load_and_train_model():
-    # A. Load Data
     try:
         df = pd.read_csv('SCMS_Delivery_History_Dataset.csv', encoding='latin1')
     except FileNotFoundError:
         return None, None
 
-    # B. Cleanup & Preprocessing
+    # Cleaning
     if 'ID' in df.columns: df.rename(columns={'ID': 'id'}, inplace=True)
     elif 'ï»¿ID' in df.columns: df.rename(columns={'ï»¿ID': 'id'}, inplace=True)
 
     df['Scheduled Delivery Date'] = pd.to_datetime(df['Scheduled Delivery Date'], errors='coerce')
     df['Delivered to Client Date'] = pd.to_datetime(df['Delivered to Client Date'], errors='coerce')
     df = df.dropna(subset=['Scheduled Delivery Date', 'Delivered to Client Date'])
-    
+
     df['Delay_Days'] = (df['Delivered to Client Date'] - df['Scheduled Delivery Date']).dt.days
     df['Is_Late'] = (df['Delay_Days'] > 0).astype(int)
 
-    # Numeric Cleaning
     for col in ['Weight (Kilograms)', 'Freight Cost (USD)', 'Line Item Value', 'Line Item Quantity']:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-    
+
     df['Shipment Mode'] = df['Shipment Mode'].fillna('Unknown')
     df['Scheduled_Month'] = df['Scheduled Delivery Date'].dt.month
     df['Scheduled_Year'] = df['Scheduled Delivery Date'].dt.year
 
-    # Vendors
     unique_vendors = df['Vendor'].unique()
     vendor_map = {name: f'Vendor_{i+1}' for i, name in enumerate(unique_vendors)}
     df['Vendors'] = df['Vendor'].map(vendor_map)
 
-    # C. Features & Encoding
-    feature_cols = ['Country', 'Shipment Mode', 'Vendors', 
-                    'Line Item Quantity', 'Line Item Value', 'Weight (Kilograms)', 
+    # Features & Training
+    feature_cols = ['Country', 'Shipment Mode', 'Vendors',
+                    'Line Item Quantity', 'Line Item Value', 'Weight (Kilograms)',
                     'Freight Cost (USD)', 'Scheduled_Month', 'Scheduled_Year']
     X = df[feature_cols].copy()
 
@@ -53,120 +71,119 @@ def load_and_train_model():
         X[col] = le.fit_transform(X[col].astype(str))
         label_encoders[col] = le
 
-    # D. Train Models (Paranoid Mode Enabled)
-    # Using n_estimators=60 to keep it fast
+    # Train 
     clf = RandomForestClassifier(n_estimators=60, max_depth=12, random_state=42, class_weight='balanced')
     clf.fit(X, df['Is_Late'])
-    
+
     reg = RandomForestRegressor(n_estimators=60, max_depth=12, random_state=42)
     reg.fit(X, df['Delay_Days'])
 
-    model_artifacts = {
-        'classifier': clf,
-        'regressor': reg,
-        'encoders': label_encoders,
-        'feature_cols': feature_cols,
-        'unique_values': {col: df[col].astype(str).unique().tolist() for col in ['Country', 'Shipment Mode', 'Vendors']}
-    }
-    
-    return model_artifacts, df
+    return clf, reg, label_encoders, df
 
+# Loading model
+with st.spinner("🧠 Booting AI..."):
+    clf, reg, encoders, history_df = load_and_train_model()
 
-with st.spinner("🧠 Initializing Model..."):
-    model_artifacts, history_df = load_and_train_model()
-
-if model_artifacts is None:
-    st.error("❌ Error: 'SCMS_Delivery_History_Dataset.csv' not found. Please upload it to GitHub!")
+if clf is None:
+    st.error("❌ CSV Missing!")
     st.stop()
 
-# Unpack for use
-clf = model_artifacts['classifier']
-reg = model_artifacts['regressor']
-encoders = model_artifacts['encoders']
-feature_cols = model_artifacts['feature_cols']
-unique_values = model_artifacts['unique_values']
+unique_values = {col: history_df[col].unique() for col in ['Country', 'Shipment Mode', 'Vendors']}
 
-# --- 3. SIDEBAR ---
-st.sidebar.title("Supply Chain AI")
-st.sidebar.markdown("---")
-page = st.sidebar.radio("Navigate", ["📊 Executive Dashboard", "🔮 Risk Predictor"])
+# --- 3. HEADER & GLOBAL FILTERS  ---
+c1, c2 = st.columns([2, 2])
+with c1:
+    st.title("🛡️ Supply Chain Dashboard")
+    # st.caption("AI-Powered Detection of Logistics Bottlenecks")
 
-# --- 4. PAGE: EXECUTIVE DASHBOARD ---
-if page == "📊 Executive Dashboard":
-    st.title("📊 Unified Supply Chain Risk View")
+with c2:
+    # Top-Bar Filters
+    f1, f2 = st.columns(2)
+    with f1:
+        # Date Filter
+        min_date = history_df['Scheduled Delivery Date'].min()
+        max_date = history_df['Scheduled Delivery Date'].max()
+        start_date, end_date = st.date_input("📅 Date Range", [min_date, max_date])
+    with f2:
+        # MODE FILTER (Switched from Country)
+        selected_mode = st.selectbox("🚢 Filter Mode", ["All"] + sorted(history_df['Shipment Mode'].unique().tolist()))
 
-    if history_df.empty:
-        st.warning("Upload the dataset to see analytics.")
+# --- APPLY FILTERS ---
+filtered_df = history_df.copy()
+mask = (filtered_df['Scheduled Delivery Date'].dt.date >= start_date) & (filtered_df['Scheduled Delivery Date'].dt.date <= end_date)
+filtered_df = filtered_df.loc[mask]
+
+if selected_mode != "All":
+    filtered_df = filtered_df[filtered_df['Shipment Mode'] == selected_mode]
+
+# --- 4. TABS ---
+tab1, tab2, tab3 = st.tabs(["📊 Executive View", "🔮 Risk Simulator", "📋 Data Explorer"])
+
+# === TAB 1: DASHBOARD ===
+with tab1:
+    if filtered_df.empty:
+        st.warning("No data matches these filters.")
     else:
-        # KPIs
-        total_shipments = len(history_df)
-        late_shipments = history_df['Is_Late'].sum()
-        avg_delay = history_df['Delay_Days'].mean()
-        late_rate = (late_shipments / total_shipments) * 100
+        # Row 1: KPIs
+        total = len(filtered_df)
+        late_rate = filtered_df['Is_Late'].mean()
+        avg_delay = filtered_df['Delay_Days'].mean()
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Shipments", f"{total_shipments:,}")
-        col2.metric("On-Time Rate", f"{100 - late_rate:.1f}%")
-        col3.metric("High Risk (Late) Rate", f"{late_rate:.1f}%", delta_color="inverse")
-        col4.metric("Avg Delay", f"{avg_delay:.1f} Days")
-        st.markdown("---")
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Total Shipments", f"{total:,}")
+        k2.metric("On-Time Rate", f"{100 - (late_rate*100):.1f}%")
+        k3.metric("High Risk Rate", f"{late_rate:.1%}", delta_color="inverse")
+        k4.metric("Avg Timeline", f"{avg_delay:.1f} Days")
 
-        # Charts
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("⚠️ Risk by Country")
-            country_risk = history_df.groupby('Country')['Is_Late'].mean().reset_index()
-            country_risk = country_risk.sort_values('Is_Late', ascending=False).head(10)
-            fig_country = px.bar(country_risk, x='Is_Late', y='Country', orientation='h',
-                                 title="Top 10 High-Risk Destinations", color='Is_Late', color_continuous_scale='Reds')
-            st.plotly_chart(fig_country, use_container_width=True)
+        # Row 2: Charts 
+        row2_1, row2_2 = st.columns(2)
 
-        with c2:
-            st.subheader("📦 Value vs. Risk")
-            sample_df = history_df.sample(min(1000, len(history_df)))
-            fig_scatter = px.scatter(
-                sample_df,
-                x='Line Item Value',
-                y='Delay_Days',
-                color='Is_Late',
-                size='Line Item Quantity',
-                title="High Value Shipment Analysis",
-                log_x=True,
-                color_discrete_map={True: 'red', False: 'green'}
-            )
+        with row2_1:
+            # BAR CHART: Top Risky COUNTRIES (Switched back from Vendors)
+            st.markdown("##### ⚠️ Top Risky Countries")
+            country_risk = filtered_df.groupby('Country')['Is_Late'].mean().reset_index()
+            # Sort and take top 8
+            country_risk = country_risk.sort_values('Is_Late', ascending=False).head(8)
+
+            fig_bar = px.bar(country_risk, x='Is_Late', y='Country', orientation='h',
+                             title="", color='Is_Late', color_continuous_scale='Reds')
+            fig_bar.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0), xaxis_title="Probability of Delay")
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        with row2_2:
+            # SCATTER CHART
+            st.markdown("##### 📦 Cost vs. Risk")
+            sample = filtered_df.sample(min(500, len(filtered_df)))
+            fig_scatter = px.scatter(sample, x='Line Item Value', y='Delay_Days', color='Is_Late', size='Line Item Quantity',
+                                     title="", color_discrete_map={True: 'red', False: 'green'}, log_x=True)
+            fig_scatter.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
             st.plotly_chart(fig_scatter, use_container_width=True)
 
-        # Feature Importance
-        st.subheader("🔍 What Drives Risk?")
-        importances = clf.feature_importances_
-        feature_df = pd.DataFrame({'Feature': feature_cols, 'Importance': importances})
-        feature_df = feature_df.sort_values('Importance', ascending=True)
-        fig_imp = px.bar(feature_df, x='Importance', y='Feature', orientation='h',
-                         title="Key Drivers", color='Importance', color_continuous_scale='Blues')
-        st.plotly_chart(fig_imp, use_container_width=True)
+# === TAB 2: SIMULATOR ===
+with tab2:
+    # st.markdown("##### 🔮 Risk Calculator")
 
-# --- 5. PAGE: RISK PREDICTOR ---
-elif page == "🔮 Risk Predictor":
-    st.title("🔮 Interactive Risk Scorer")
-
-    with st.form("prediction_form"):
+    with st.form("sim_form"):
+        # Compact 3-column layout
         c1, c2, c3 = st.columns(3)
         with c1:
             country_in = st.selectbox("Destination", sorted(unique_values['Country']))
-            mode_in = st.selectbox("Shipment Mode", sorted(unique_values['Shipment Mode']))
+            mode_in = st.selectbox("Mode", sorted(unique_values['Shipment Mode']))
             vendor_in = st.selectbox("Vendor", sorted(unique_values['Vendors']))
         with c2:
-            qty_in = st.number_input("Quantity", 1, 100000, 1000)
-            val_in = st.number_input("Value ($)", 0.0, 1000000.0, 5000.0)
-            weight_in = st.number_input("Weight (kg)", 0.0, 50000.0, 100.0)
+            qty_in = st.number_input("Qty", 100, 100000, 5000)
+            val_in = st.number_input("Value ($)", 1000, 1000000, 50000)
+            weight_in = st.number_input("Weight (kg)", 10, 50000, 500)
         with c3:
-            freight_in = st.number_input("Freight ($)", 0.0, 50000.0, 500.0)
-            month_in = st.slider("Scheduled Month", 1, 12, 6)
-            year_in = st.number_input("Scheduled Year", 2000, 2030, 2023)
+            freight_in = st.number_input("Freight ($)", 100, 50000, 1500)
+            month_in = st.slider("Month", 1, 12, 6)
+            year_in = st.number_input("Year", 2023, 2030, 2024)
 
-        submit = st.form_submit_button("Calculate Risk")
+        # Submit Button
+        submitted = st.form_submit_button("🚀 Risk Prediction", use_container_width=True)
 
-    if submit:
+    if submitted:
+        # Prepare Data
         input_data = pd.DataFrame({
             'Country': [country_in], 'Shipment Mode': [mode_in], 'Vendors': [vendor_in],
             'Line Item Quantity': [qty_in], 'Line Item Value': [val_in], 'Weight (Kilograms)': [weight_in],
@@ -177,21 +194,27 @@ elif page == "🔮 Risk Predictor":
             val = str(input_data[col][0])
             input_data[col] = le.transform([val]) if val in le.classes_ else le.transform([le.classes_[0]])
 
-        risk_prob = clf.predict_proba(input_data)[0][1]
-        delay_est = reg.predict(input_data)[0]
+        prob = clf.predict_proba(input_data)[0][1]
+        days = reg.predict(input_data)[0]
 
+        # Results
         st.divider()
-        col_res1, col_res2 = st.columns([1, 2])
-
-        with col_res1:
-            st.caption("Risk Score")
-            if risk_prob > 0.25:
-                st.markdown(f"<h1 style='color:red'>{risk_prob:.0%}</h1>", unsafe_allow_html=True)
-                st.error("HIGH RISK")
+        res1, res2, res3 = st.columns([1, 2, 1])
+        with res1:
+            st.caption("AI Probability")
+            st.metric("Risk Score", f"{prob:.0%}")
+        with res2:
+            st.caption("Status")
+            if prob > 0.25:
+                st.error(f"🔴 HIGH RISK (Score > 25%)")
             else:
-                st.markdown(f"<h1 style='color:green'>{risk_prob:.0%}</h1>", unsafe_allow_html=True)
-                st.success("LOW RISK")
+                st.success(f"🟢 LOW RISK (Safe)")
+        with res3:
+            st.caption("Timeline")
+            st.metric("Est. Deviation", f"{days:.1f} Days")
 
-        with col_res2:
-            st.caption("Operational Impact")
-            st.metric("Estimated Timeline", f"{delay_est:.1f} Days vs Schedule")
+# === TAB 3: DATA EXPLORER (Hidden unless needed) ===
+with tab3:
+    st.dataframe(filtered_df[['Scheduled Delivery Date', 'Country', 'Vendors', 'Shipment Mode', 'Line Item Value', 'Delay_Days', 'Is_Late']])
+    csv = filtered_df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download CSV", data=csv, file_name="supply_chain_data.csv", mime="text/csv")
