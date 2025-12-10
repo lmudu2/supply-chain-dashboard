@@ -93,7 +93,7 @@ unique_values = {col: history_df[col].unique() for col in ['Country', 'Shipment 
 # --- 3. HEADER & GLOBAL FILTERS  ---
 c1, c2 = st.columns([2, 2])
 with c1:
-    st.title("🛡️ Supply Chain Dashboard")
+    st.title("Supply Chain Dashboard")
     # st.caption("AI-Powered Detection of Logistics Bottlenecks")
 
 with c2:
