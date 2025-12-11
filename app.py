@@ -215,7 +215,7 @@ with tab2:
     if submitted:
         # Prepare Data
         input_data = pd.DataFrame({
-            'Country': [country_in], 'Shipment Mode': [mode_in], 'Vendors': [vendor_in],
+            'Country': [country_in], 'Shipment Mode': [mode_in], 'Vendors': [vendor_in],'Product Group': [product_in],
             'Line Item Quantity': [qty_in], 'Line Item Value': [val_in], 'Weight (Kilograms)': [weight_in],
             'Freight Cost (USD)': [freight_in], 'Scheduled_Month': [month_in], 'Scheduled_Year': [year_in]
         })
@@ -245,6 +245,6 @@ with tab2:
 
 # === TAB 3: DATA EXPLORER (Hidden unless needed) ===
 with tab3:
-    st.dataframe(filtered_df[['Scheduled Delivery Date', 'Country', 'Vendors', 'Shipment Mode', 'Line Item Value', 'Delay_Days', 'Is_Late']])
+    st.dataframe(filtered_df[['Scheduled Delivery Date', 'Country', 'Vendors', 'Shipment Mode', 'Line Item Value','Product Group', 'Delay_Days', 'Is_Late']])
     csv = filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download CSV", data=csv, file_name="supply_chain_data.csv", mime="text/csv")
