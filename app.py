@@ -10,7 +10,7 @@ st.set_page_config(page_title="SupplyGuard AI", page_icon="🛡️", layout="wid
 
 st.markdown("""
     <style>
-        .block-container {padding-top: 1rem; padding-bottom: 0rem;}
+        .block-container {padding-top: 1rem; padding-bottom: 0rem; padding-left: 2rem; padding-right: 2rem}
         h1 {margin-top: 0rem; padding-top: 0rem;}
         h5 {margin-bottom: 0rem; padding-bottom: 0.2rem; font-size: 1rem !important;}
 
