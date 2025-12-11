@@ -59,28 +59,28 @@ def load_and_train_model():
         'Truck': 'Land', 'Ocean': 'Sea', 'N/A': 'Unknown'
     }
     df['Shipment Mode'] = df['Shipment Mode'].map(mode_mapping).fillna('Unknown')
-    df['Product Group'] = df['Product Group'].fillna('Other')
-    product_mapping = {
-        'ARV': 'Medication',   # Antiretrovirals (Pills)
-        'ACT': 'Medication',   # Malaria Drugs (Pills)
-        'ANTM': 'Medication',  # Antimalarials (Pills)
-        'HRDT': 'Test Kits',   # HIV Rapid Tests
-        'MRDT': 'Test Kits'    # Malaria Rapid Tests
-    }
-    df['Product Group'] = df['Product Group'].replace(product_mapping)
+    # df['Product Group'] = df['Product Group'].fillna('Other')
+    # product_mapping = {
+    #     'ARV': 'Medication',   # Antiretrovirals (Pills)
+    #     'ACT': 'Medication',   # Malaria Drugs (Pills)
+    #     'ANTM': 'Medication',  # Antimalarials (Pills)
+    #     'HRDT': 'Test Kits',   # HIV Rapid Tests
+    #     'MRDT': 'Test Kits'    # Malaria Rapid Tests
+    # }
+    # df['Product Group'] = df['Product Group'].replace(product_mapping)
 
     unique_vendors = df['Vendor'].unique()
     vendor_map = {name: f'Vendor_{i+1}' for i, name in enumerate(unique_vendors)}
     df['Vendors'] = df['Vendor'].map(vendor_map)
 
     # Features & Training
-    feature_cols = ['Country', 'Shipment Mode', 'Vendors','Product Group',
+    feature_cols = ['Country', 'Shipment Mode', 'Vendors',
                     'Line Item Quantity', 'Line Item Value', 'Weight (Kilograms)',
                     'Freight Cost (USD)', 'Scheduled_Month', 'Scheduled_Year']
     X = df[feature_cols].copy()
 
     label_encoders = {}
-    for col in ['Country', 'Shipment Mode', 'Vendors','Product Group']:
+    for col in ['Country', 'Shipment Mode', 'Vendors']:
         le = LabelEncoder()
         X[col] = le.fit_transform(X[col].astype(str))
         label_encoders[col] = le
@@ -102,7 +102,7 @@ if clf is None:
     st.error("❌ CSV Missing!")
     st.stop()
 
-unique_values = {col: history_df[col].unique() for col in ['Country', 'Shipment Mode', 'Vendors', 'Product Group']}
+unique_values = {col: history_df[col].unique() for col in ['Country', 'Shipment Mode', 'Vendors']}
 
 # --- 3. HEADER & GLOBAL FILTERS  ---
 c1, c2 = st.columns([2, 2])
@@ -215,7 +215,7 @@ with tab2:
     if submitted:
         # Prepare Data
         input_data = pd.DataFrame({
-            'Country': [country_in], 'Shipment Mode': [mode_in], 'Vendors': [vendor_in],'Product Group': [product_in],
+            'Country': [country_in], 'Shipment Mode': [mode_in], 'Vendors': [vendor_in],
             'Line Item Quantity': [qty_in], 'Line Item Value': [val_in], 'Weight (Kilograms)': [weight_in],
             'Freight Cost (USD)': [freight_in], 'Scheduled_Month': [month_in], 'Scheduled_Year': [year_in]
         })
@@ -245,6 +245,6 @@ with tab2:
 
 # === TAB 3: DATA EXPLORER (Hidden unless needed) ===
 with tab3:
-    st.dataframe(filtered_df[['Scheduled Delivery Date', 'Country', 'Vendors', 'Shipment Mode', 'Line Item Value','Product Group', 'Delay_Days', 'Is_Late']])
+    st.dataframe(filtered_df[['Scheduled Delivery Date', 'Country', 'Vendors', 'Shipment Mode', 'Line Item Value', 'Delay_Days', 'Is_Late']])
     csv = filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download CSV", data=csv, file_name="supply_chain_data.csv", mime="text/csv")
