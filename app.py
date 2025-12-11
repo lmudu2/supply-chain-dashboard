@@ -12,6 +12,7 @@ st.markdown("""
     <style>
         .block-container {padding-top: 1rem; padding-bottom: 0rem;}
         h1 {margin-top: 0rem; padding-top: 0rem;}
+        h5 {margin-bottom: 0rem; padding-bottom: 0.2rem; font-size: 1rem !important;}
 
         /* Metric Cards Styling */
         div[data-testid="stMetric"] {
