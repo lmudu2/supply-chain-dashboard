@@ -54,19 +54,33 @@ def load_and_train_model():
     df['Shipment Mode'] = df['Shipment Mode'].fillna('Unknown')
     df['Scheduled_Month'] = df['Scheduled Delivery Date'].dt.month
     df['Scheduled_Year'] = df['Scheduled Delivery Date'].dt.year
+    mode_mapping = {
+        'Air': 'Air', 'Air Charter': 'Air',
+        'Truck': 'Land', 'Ocean': 'Sea', 'N/A': 'Unknown'
+    }
+    df['Shipment Mode'] = df['Shipment Mode'].map(mode_mapping).fillna('Unknown')
+    df['Product Group'] = df['Product Group'].fillna('Other')
+    product_mapping = {
+        'ARV': 'Medication',   # Antiretrovirals (Pills)
+        'ACT': 'Medication',   # Malaria Drugs (Pills)
+        'ANTM': 'Medication',  # Antimalarials (Pills)
+        'HRDT': 'Test Kits',   # HIV Rapid Tests
+        'MRDT': 'Test Kits'    # Malaria Rapid Tests
+    }
+    df['Product Group'] = df['Product Group'].replace(product_mapping)
 
     unique_vendors = df['Vendor'].unique()
     vendor_map = {name: f'Vendor_{i+1}' for i, name in enumerate(unique_vendors)}
     df['Vendors'] = df['Vendor'].map(vendor_map)
 
     # Features & Training
-    feature_cols = ['Country', 'Shipment Mode', 'Vendors',
+    feature_cols = ['Country', 'Shipment Mode', 'Vendors','Product Group',
                     'Line Item Quantity', 'Line Item Value', 'Weight (Kilograms)',
                     'Freight Cost (USD)', 'Scheduled_Month', 'Scheduled_Year']
     X = df[feature_cols].copy()
 
     label_encoders = {}
-    for col in ['Country', 'Shipment Mode', 'Vendors']:
+    for col in ['Country', 'Shipment Mode', 'Vendors','Product Group']:
         le = LabelEncoder()
         X[col] = le.fit_transform(X[col].astype(str))
         label_encoders[col] = le
@@ -88,12 +102,12 @@ if clf is None:
     st.error("❌ CSV Missing!")
     st.stop()
 
-unique_values = {col: history_df[col].unique() for col in ['Country', 'Shipment Mode', 'Vendors']}
+unique_values = {col: history_df[col].unique() for col in ['Country', 'Shipment Mode', 'Vendors', 'Product Group']}
 
 # --- 3. HEADER & GLOBAL FILTERS  ---
 c1, c2 = st.columns([2, 2])
 with c1:
-    st.title("Supply Chain Dashboard")
+    st.title("Supplier Risk Analysis")
     # st.caption("AI-Powered Detection of Logistics Bottlenecks")
 
 with c2:
@@ -106,7 +120,7 @@ with c2:
         start_date, end_date = st.date_input("📅 Date Range", [min_date, max_date])
     with f2:
         # MODE FILTER (Switched from Country)
-        selected_mode = st.selectbox("🚢 Filter Mode", ["All"] + sorted(history_df['Shipment Mode'].unique().tolist()))
+        selected_mode = st.selectbox("Shipment Mode", ["All"] + sorted(history_df['Shipment Mode'].unique().tolist()))
 
 # --- APPLY FILTERS ---
 filtered_df = history_df.copy()
@@ -152,12 +166,28 @@ with tab1:
 
         with row2_2:
             # SCATTER CHART
-            st.markdown("##### 📦 Cost vs. Risk")
-            sample = filtered_df.sample(min(500, len(filtered_df)))
-            fig_scatter = px.scatter(sample, x='Line Item Value', y='Delay_Days', color='Is_Late', size='Line Item Quantity',
-                                     title="", color_discrete_map={True: 'red', False: 'green'}, log_x=True)
-            fig_scatter.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            # st.markdown("##### 📦 Cost vs. Risk")
+            # sample = filtered_df.sample(min(500, len(filtered_df)))
+            # fig_scatter = px.scatter(sample, x='Line Item Value', y='Delay_Days', color='Is_Late', size='Line Item Quantity',
+            #                          title="", color_discrete_map={True: 'red', False: 'green'}, log_x=True)
+            # fig_scatter.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
+            # st.plotly_chart(fig_scatter, use_container_width=True)
+            st.markdown("##### 💰 Risk Rate by Shipment Value")
+            chart_df = filtered_df.copy()
+            bins = [-1, 10000, 50000, 250000, float('inf')]
+            labels = ['Low (<$10k)', 'Medium ($10k-50k)', 'High ($50k-250k)', 'Very High (>$250k)']
+            chart_df['Value_Bin'] = pd.cut(chart_df['Line Item Value'], bins=bins, labels=labels)
+
+            risk_by_value = chart_df.groupby('Value_Bin', observed=False)['Is_Late'].mean().reset_index()
+
+            fig_val = px.bar(
+                risk_by_value, x='Value_Bin', y='Is_Late', text_auto='.1%',
+                color='Is_Late', color_continuous_scale='Reds',
+                labels={'Value_Bin': 'Value Tier', 'Is_Late': 'Risk Probability'}
+            )
+            # ROBUST LAYOUT
+            fig_val.update_layout(yaxis_tickformat='.0%', height=300, margin=dict(l=50, r=20, t=20, b=50))
+            st.plotly_chart(fig_val, use_container_width=True)
 
 # === TAB 2: SIMULATOR ===
 with tab2:
