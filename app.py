@@ -106,22 +106,35 @@ if clf is None:
 unique_values = {col: history_df[col].unique() for col in ['Country', 'Shipment Mode', 'Vendors']}
 
 # --- 3. HEADER & GLOBAL FILTERS  ---
-c1, c2 = st.columns([2, 2])
+# c1, c2 = st.columns([2, 2])
+# with c1:
+#     st.title("Supplier Risk Analysis")
+#     # st.caption("AI-Powered Detection of Logistics Bottlenecks")
+
+# with c2:
+#     # Top-Bar Filters
+#     f1, f2 = st.columns(2)
+#     with f1:
+#         # Date Filter
+#         min_date = history_df['Scheduled Delivery Date'].min()
+#         max_date = history_df['Scheduled Delivery Date'].max()
+#         start_date, end_date = st.date_input("📅 Date Range", [min_date, max_date])
+#     with f2:
+#         # MODE FILTER (Switched from Country)
+#         selected_mode = st.selectbox("Shipment Mode", ["All"] + sorted(history_df['Shipment Mode'].unique().tolist()))
+st.title("Supplier Risk Analysis")
+
+c1, c2 = st.columns(2)
 with c1:
-    st.title("Supplier Risk Analysis")
-    # st.caption("AI-Powered Detection of Logistics Bottlenecks")
+    min_date = history_df['Scheduled Delivery Date'].min()
+    max_date = history_df['Scheduled Delivery Date'].max()
+    # Explicit Label
+    start_date, end_date = st.date_input("Date Range", [min_date, max_date])
 
 with c2:
-    # Top-Bar Filters
-    f1, f2 = st.columns(2)
-    with f1:
-        # Date Filter
-        min_date = history_df['Scheduled Delivery Date'].min()
-        max_date = history_df['Scheduled Delivery Date'].max()
-        start_date, end_date = st.date_input("📅 Date Range", [min_date, max_date])
-    with f2:
-        # MODE FILTER (Switched from Country)
-        selected_mode = st.selectbox("Shipment Mode", ["All"] + sorted(history_df['Shipment Mode'].unique().tolist()))
+    # Explicit Label
+    selected_mode = st.selectbox("Shipment Mode", ["All"] + sorted(history_df['Shipment Mode'].unique().tolist()))
+
 
 # --- APPLY FILTERS ---
 filtered_df = history_df.copy()
@@ -161,7 +174,7 @@ with tab1:
             country_risk = country_risk.sort_values('Is_Late', ascending=False).head(8)
 
             fig_bar = px.bar(country_risk, x='Is_Late', y='Country', orientation='h',
-                             title="", color='Is_Late', color_continuous_scale='Reds')
+                             title="", color='Is_Late', text_auto='.1%',color_continuous_scale='Reds')
             fig_bar.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0), xaxis_title="Probability of Delay")
             st.plotly_chart(fig_bar, use_container_width=True)
 
